@@ -1,55 +1,53 @@
 package main
 
 import (
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/examples/util"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
-	"github.com/google/gopacket/tcpassembly"
-	"log"
-	"siege_traffic/internal/stream"
-	"time"
+	"fmt"
+	"github.com/DimKush/siege_traffic/internal/logger"
+	"github.com/DimKush/siege_traffic/internal/option"
+	sniffer "github.com/DimKush/siege_traffic/internal/sniffer"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
+	"os"
 )
 
-func initEventHandlers() {
+func NewApp() *cobra.Command {
 
-}
+	opt := &option.Options{}
+	app := &cobra.Command{
+		Use:   "siege_traffic",
+		Short: "Catch and analyze games traffic UDP (in-game packages)",
+		Run: func(cmd *cobra.Command, args []string) {
+			if opt.FilterServerIP == "" {
+				fmt.Println("cannot run. Server ip is not setted")
+				os.Exit(1)
+			}
 
-func main() {
-	defer util.Run()()
-
-	handle, err := pcap.OpenLive("eth0", 1600, true, pcap.BlockForever)
-	if err != nil {
-		log.Fatalf("Cannot one handle")
+			snf := sniffer.NewSniffer(opt)
+			snf.Start()
+		},
 	}
 
-	streamFactory := &stream.HttpStreamFactory{}
-	streamPool := tcpassembly.NewStreamPool(streamFactory)
-	assembler := tcpassembly.NewAssembler(streamPool)
+	app.Flags().StringVarP(&opt.DeviceName, "device-name", "d", "\\Device\\NPF_{BC0CDC3B-9E5A-4A2C-9A69-6CC121A05865}", "device name")
+	app.Flags().StringVarP(&opt.FilterClientIP, "client-ip", "c", "192.168.3.8", "client ip")
+	app.Flags().StringVarP(&opt.FilterServerIP, "server-ip", "s", "", "server ip")
 
-	log.Println("reading in packets")
+	app.Flags().PrintDefaults()
+	return app
+}
 
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	packets := packetSource.Packets()
-	ticker := time.Tick(time.Minute)
-	for {
-		select {
-		case packet := <-packets:
-			// A nil packet indicates the end of a pcap file.
-			if packet == nil {
-				return
-			}
-			log.Println(packet)
-			if packet.NetworkLayer() == nil || packet.TransportLayer() == nil || packet.TransportLayer().LayerType() != layers.LayerTypeTCP {
-				log.Println("Unusable packet")
-				continue
-			}
-			tcp := packet.TransportLayer().(*layers.TCP)
-			assembler.AssembleWithTimestamp(packet.NetworkLayer().NetworkFlow(), tcp, packet.Metadata().Timestamp)
-
-		case <-ticker:
-			// Every minute, flush connections that haven't seen activity in the past 2 minutes.
-			assembler.FlushOlderThan(time.Now().Add(time.Minute * -2))
-		}
+func init() {
+	_, err := logger.NewLogger()
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		//log.Logger = zLog
+		log.Info().Msg("Logger initialized.")
+	}
+}
+func main() {
+	app := NewApp()
+	if err := app.Execute(); err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 }
