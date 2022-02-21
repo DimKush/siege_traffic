@@ -4,6 +4,7 @@ import (
 	"github.com/DimKush/siege_traffic/internal/dns"
 	"github.com/DimKush/siege_traffic/internal/option"
 	"github.com/DimKush/siege_traffic/internal/pcap"
+	"github.com/rs/zerolog/log"
 	"time"
 )
 
@@ -19,6 +20,8 @@ type Sniffer struct {
 }
 
 func NewSniffer(opts *option.Options) *Sniffer {
+
+	log.Info().Msg("Init new sniffer")
 	dnsResolver := dns.NewDnsResolver()
 	//pcapClient, err := pcap.NewPcapClient(opts.deviceName, opts.processPID, dnsResolver.Lookup)
 
@@ -30,9 +33,9 @@ func NewSniffer(opts *option.Options) *Sniffer {
 }
 
 func (s *Sniffer) Start() {
-
+	log.Info().Msg("Start sniffer tracking")
 	for {
-		ticker := time.Tick(time.Duration(10 * time.Second))
+		ticker := time.Tick(time.Duration(3 * time.Second))
 
 		select {
 

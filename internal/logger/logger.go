@@ -2,15 +2,17 @@ package logger
 
 import (
 	"fmt"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/diode"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
+	"go.uber.org/multierr"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/diode"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -21,13 +23,7 @@ const (
 	TRACE
 )
 
-type log_struct struct {
-	path_to_logs   string
-	today_log_file string
-	zLog           *zerolog.Logger
-}
-
-func (data *log_struct) createLogNewDate() error {
+func createLogNewDate(pathToLogs, todayLogFile string) error {
 	var strb strings.Builder
 
 	log_path_dir_foo := func() string {
@@ -39,31 +35,41 @@ func (data *log_struct) createLogNewDate() error {
 	}
 	var separator string = log_path_dir_foo()
 
-	strb.WriteString(data.path_to_logs)
+	strb.WriteString(pathToLogs)
 	strb.WriteString(separator)
-	strb.WriteString(data.today_log_file)
+	strb.WriteString(todayLogFile)
 
-	log_file, err := os.Create(strb.String())
+	logFile, err := os.Create(strb.String())
 
 	if err != nil {
 		err := fmt.Errorf("Cannot create the file %s, Reason: %s", strb.String(), err.Error())
 		return err
 	}
 
-	log_file.Close()
+	fmt.Printf("file create : %s\n", logFile.Name())
+	err = os.Chmod(strb.String(), 0666)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
+	err = logFile.Close()
+	if err != nil {
+		fmt.Println("Cannot close log file : %s", err)
+		os.Exit(1)
+	}
 	return nil
 }
 
-func (data *log_struct) checkLogDateFile() (bool, error) {
-	files, err := ioutil.ReadDir(data.path_to_logs)
+func checkLogDateFile(pathToLogs, todayLogFile string) (bool, error) {
+	files, err := ioutil.ReadDir(pathToLogs)
 	if err != nil {
-		err := fmt.Errorf("Cannot open the directory with logs %s. Reason : %s", data.path_to_logs, err.Error())
+		err := fmt.Errorf("Cannot open the directory with logs %s. Reason : %s", pathToLogs, err.Error())
 		return false, err
 	}
 
 	for _, file := range files {
-		if file.Name() == data.today_log_file {
+		if file.Name() == todayLogFile {
 			return true, nil
 		}
 	}
@@ -71,9 +77,9 @@ func (data *log_struct) checkLogDateFile() (bool, error) {
 	return false, nil
 }
 
-func (data *log_struct) init() error {
+func InitLogger() error {
 	strLevel := strings.ToUpper(viper.GetString("log_level"))
-
+	pathToLogs := ""
 	var complete_path = func(data string) string {
 		var strb strings.Builder
 		if runtime.GOOS == "windows" {
@@ -88,36 +94,42 @@ func (data *log_struct) init() error {
 	}
 
 	if viper.GetString("log_path") == "" {
-		log_path_dir_foo := func() string {
+		logPathDirFoo := func() string {
 			if runtime.GOOS == "windows" {
-				return "c:\\dimkush_guestbook\\log\\"
+				return "c:\\traffic\\"
 			}
 
-			return "/opt/dimkush_guestbook/log/"
+			return "/opt/traffic/"
 		}
-		data.path_to_logs = log_path_dir_foo()
+		pathToLogs = logPathDirFoo()
 	} else {
-		data.path_to_logs = complete_path(viper.GetString("log_path"))
+		pathToLogs = complete_path(viper.GetString("log_path"))
 	}
 
-	current_dt := time.Now()
+	if _, err := os.Stat(pathToLogs); os.IsNotExist(err) {
+		errMkDir := os.Mkdir(pathToLogs, 0777)
+
+		err = multierr.Append(err, errMkDir)
+	}
+
+	currentDt := time.Now()
 
 	var strb strings.Builder
-	strb.WriteString("guestbook_")
+	strb.WriteString("traffic_")
 
-	current_date_str := current_dt.Format("2006-Jan-02")
+	currentDateStr := currentDt.Format("2006-Jan-02")
 
-	strb.WriteString(current_date_str)
+	strb.WriteString(currentDateStr)
 
 	strb.WriteString(".log")
 
-	data.today_log_file = strb.String()
+	todayLogFile := strb.String()
 
-	if needNewfile, err := data.checkLogDateFile(); err != nil {
+	if needNewFile, err := checkLogDateFile(pathToLogs, todayLogFile); err != nil {
 		return err
 	} else {
-		if !needNewfile {
-			if err := data.createLogNewDate(); err != nil {
+		if !needNewFile {
+			if err := createLogNewDate(pathToLogs, todayLogFile); err != nil {
 				return err
 			}
 		}
@@ -125,10 +137,11 @@ func (data *log_struct) init() error {
 
 	strb.Reset()
 
-	strb.WriteString(data.path_to_logs)
-	strb.WriteString(data.today_log_file)
+	strb.WriteString(pathToLogs)
+	strb.WriteString(todayLogFile)
 
-	file, err := os.OpenFile(strb.String(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	fmt.Printf("file open : %s\n", strb.String())
+	file, err := os.OpenFile(strb.String(), syscall.O_RDWR, 0666)
 	if err != nil {
 		err := fmt.Errorf("Cannot open the log file %s, Reason : %s", strb.String(), err.Error())
 		return err
@@ -138,8 +151,7 @@ func (data *log_struct) init() error {
 		fmt.Printf("Logger dropped %d messages", missed)
 	})
 
-	zlogger := zerolog.New(writer).With().Caller().Timestamp().Logger().Output(file)
-	data.zLog = &zlogger
+	log.Logger = zerolog.New(writer).With().Caller().Timestamp().Logger().Output(file)
 
 	switch strLevel {
 	case "ERROR":
@@ -164,19 +176,9 @@ func (data *log_struct) init() error {
 		}
 	default:
 		{
-			zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+			zerolog.SetGlobalLevel(zerolog.InfoLevel)
 		}
 	}
 
 	return nil
-}
-
-func NewLogger() (zerolog.Logger, error) {
-	var logger_obj log_struct
-
-	if err := logger_obj.init(); err != nil {
-		return zerolog.Logger{}, err
-	}
-
-	return *logger_obj.zLog, nil
 }

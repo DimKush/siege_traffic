@@ -140,7 +140,7 @@ func (c *Client) parsePacket(device string, packet gopacket.Packet) {
 			} else if ipv4pkg.SrcIP.String() == c.serverIP {
 				c.serverPort = c.parsePort(udpPkg.SrcPort.String())
 				c.clientPort = c.parsePort(udpPkg.DstPort.String())
-				
+
 				if ok {
 					c.serverPackageSizes = append(c.clientPackageSizes, dataLen)
 				} else {
@@ -205,7 +205,7 @@ func (c *Client) DropToLog() {
 
 	avgClPkgSz := sumClPkg / len(c.clientPackageSizes)
 
-	log.Trace().Msgf("sender: %s:%d => receiver: %s:%d sent bytes: %db, average UDP package size : %db, the biggest package size %db count of packages: %d, count of the bad packages: %d",
+	log.Info().Msgf("sender: %s:%d => receiver: %s:%d sent bytes: %db, average UDP package size : %db, the biggest package size %db count of packages: %d, count of the bad packages: %d",
 		c.clientIP, c.clientPort, c.serverIP, c.serverPort, sumClPkg, avgClPkgSz, maxClPkSz, len(c.clientPackageSizes), c.badClientPackagesCount,
 	)
 
@@ -220,7 +220,7 @@ func (c *Client) DropToLog() {
 
 	avgSrvPkgSz := sumSrvPkg / len(c.serverPackageSizes)
 
-	log.Trace().Msgf("sender: %s:%d => receiver: %s:%d sent bytes: %db average UDP package size : %db the biggest package size %db, count of packages: %d, count of the bad packages: %d",
+	log.Info().Msgf("sender: %s:%d => receiver: %s:%d sent bytes: %db average UDP package size : %db the biggest package size %db, count of packages: %d, count of the bad packages: %d",
 		c.serverIP, c.serverPort, c.clientIP, c.clientPort, sumSrvPkg, avgSrvPkgSz, maxSrvPkSz, len(c.serverPackageSizes), c.badServerPackagesCount,
 	)
 

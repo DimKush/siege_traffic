@@ -5,13 +5,14 @@ import (
 	"github.com/DimKush/siege_traffic/internal/logger"
 	"github.com/DimKush/siege_traffic/internal/option"
 	sniffer "github.com/DimKush/siege_traffic/internal/sniffer"
+	"github.com/google/gopacket/pcap"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"os"
 )
 
 func NewApp() *cobra.Command {
-
+	log.Info().Msg("Init application")
 	opt := &option.Options{}
 	app := &cobra.Command{
 		Use:   "siege_traffic",
@@ -36,13 +37,19 @@ func NewApp() *cobra.Command {
 }
 
 func init() {
-	_, err := logger.NewLogger()
+	err := logger.InitLogger()
 	if err != nil {
-		fmt.Println(err.Error())
-	} else {
-		//log.Logger = zLog
-		log.Info().Msg("Logger initialized.")
+		fmt.Println(err)
+		os.Exit(1)
 	}
+	devices, err := pcap.FindAllDevs()
+	if err != nil {
+		fmt.Println(err)
+	}
+	for _, r := range devices {
+		fmt.Println(r.Name)
+	}
+
 }
 func main() {
 	app := NewApp()
